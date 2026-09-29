@@ -7,7 +7,7 @@
   ros__parameters:
     # 1. 发现连接（作业要求1）
     serial_number: ""       # 相机序列号，为空则连接第一个找到的相机
-    ip_address: "" # 如果是网口相机，需要配IP
+    ip_address: "10.64.208.38" # 如果是网口相机，需要配IP
 
     # 2. 采集参数（作业要求2）
     frame_rate: 30.0        # 帧率，单位 FPS

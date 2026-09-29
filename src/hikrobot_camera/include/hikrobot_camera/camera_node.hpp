@@ -19,7 +19,9 @@ private:
   // ROS 2 发布者和定时器
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr image_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
-
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr parameters_callback_handle_;
+  rcl_interfaces::msg::SetParametersResult on_parameter_event(
+      const std::vector<rclcpp::Parameter> & parameters);
   // 海康相机句柄
   void* camera_handle_ = nullptr;
 

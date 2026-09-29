@@ -31,6 +31,11 @@ CameraNode::CameraNode(const rclcpp::NodeOptions & options)
   } else {
     RCLCPP_ERROR(this->get_logger(), "相机连接失败！");
   }
+    // 使用 Lambda 表达式绑定参数回调，避免 std::bind 的模板推导问题
+  parameters_callback_handle_ = this->add_on_set_parameters_callback(
+    [this](const std::vector<rclcpp::Parameter> & parameters) {
+      return this->on_parameter_event(parameters);
+    });
 }
 
 CameraNode::~CameraNode()
@@ -103,7 +108,7 @@ CameraNode::~CameraNode()
         return false;
     }
 
-       MV_CC_SetEnumValue(camera_handle_, "TriggerMode", 0); 
+    MV_CC_SetEnumValue(camera_handle_, "TriggerMode", 0); 
     MV_CC_SetEnumValue(camera_handle_, "AcquisitionMode", 2); // 2 代表连续采集
       // 3. 开始取流
   nRet = MV_CC_StartGrabbing(camera_handle_);
@@ -132,9 +137,39 @@ void CameraNode::disconnect_camera()
 
 void CameraNode::set_camera_parameters()
 {
+  if (camera_handle_ == nullptr) return;
+
   double exposure = this->get_parameter("exposure_time").as_double();
   double gain = this->get_parameter("gain").as_double();
-  RCLCPP_INFO(this->get_logger(), "参数设置: 曝光=%f, 增益=%f", exposure, gain);
+  bool auto_exposure = this->get_parameter("auto_exposure").as_bool();
+  double fps = this->get_parameter("frame_rate").as_double();
+
+  // 1. 设置曝光模式（0: 关闭自动，1: 一次，2: 连续）
+  if (auto_exposure) {
+    MV_CC_SetEnumValue(camera_handle_, "ExposureAuto", 2);
+  } else {
+    MV_CC_SetEnumValue(camera_handle_, "ExposureAuto", 0);
+    // 真正设置曝光时间
+    int ret = MV_CC_SetFloatValue(camera_handle_, "ExposureTime", exposure);
+    if (ret != MV_OK) {
+      RCLCPP_ERROR(this->get_logger(), "设置曝光失败，错误码: %x", ret);
+    }
+  }
+
+  // 2. 设置增益
+  int ret_gain = MV_CC_SetFloatValue(camera_handle_, "Gain", gain);
+  if (ret_gain != MV_OK) {
+    RCLCPP_ERROR(this->get_logger(), "设置增益失败，错误码: %x", ret_gain);
+  }
+
+  // 3. 设置帧率（硬件层面）
+  MV_CC_SetBoolValue(camera_handle_, "AcquisitionFrameRateEnable", true);
+  int ret_fps = MV_CC_SetFloatValue(camera_handle_, "AcquisitionFrameRate", fps);
+  if (ret_fps != MV_OK) {
+    RCLCPP_WARN(this->get_logger(), "设置相机硬件帧率失败（可能超出上限）");
+  }
+
+  RCLCPP_INFO(this->get_logger(), "参数设置完成: 曝光=%.2f, 增益=%.2f", exposure, gain);
 }
 
 void CameraNode::grab_image()
@@ -175,5 +210,54 @@ void CameraNode::grab_image()
 
   // 5. 🚨 必须释放 SDK 的图像缓存，否则相机会卡死！
   MV_CC_FreeImageBuffer(camera_handle_, &stImageInfo);
-}}
+}
+rcl_interfaces::msg::SetParametersResult CameraNode::on_parameter_event(
+  const std::vector<rclcpp::Parameter> & parameters)
+{
+  rcl_interfaces::msg::SetParametersResult result;
+  result.successful = true;
+
+  for (const auto & param : parameters) {
+    std::string name = param.get_name();
+
+    // 1. 动态调曝光
+    if (name == "exposure_time") {
+      double val = param.as_double();
+      // 校验范围（作业要求3：参数更新应校验范围）
+      if (val < 10.0 || val > 1000000.0) {
+        result.successful = false;
+        result.reason = "曝光时间超出范围 [10, 1000000] 微秒";
+        continue;
+      }
+      int ret = MV_CC_SetFloatValue(camera_handle_, "ExposureTime", val);
+      if (ret != MV_OK) {
+        result.successful = false;
+        result.reason = "SDK设置曝光失败，错误码: " + std::to_string(ret);
+      }
+    }
+    // 2. 动态调增益
+    else if (name == "gain") {
+      double val = param.as_double();
+      int ret = MV_CC_SetFloatValue(camera_handle_, "Gain", val);
+      if (ret != MV_OK) { result.successful = false; result.reason = "SDK设置增益失败"; }
+    }
+    // 3. 动态调帧率
+    else if (name == "frame_rate") {
+      double val = param.as_double();
+      if (val <= 0) { result.successful = false; result.reason = "帧率必须大于0"; continue; }
+      
+      // 修改 ROS 2 定时器周期
+      auto period = std::chrono::milliseconds(static_cast<int>(1000.0 / val));
+      timer_->cancel();
+      timer_ = this->create_wall_timer(period, std::bind(&CameraNode::grab_image, this));
+      
+      // 修改硬件帧率
+      MV_CC_SetFloatValue(camera_handle_, "AcquisitionFrameRate", val);
+    }
+  }
+  return result;
+}
+
+
+}
 

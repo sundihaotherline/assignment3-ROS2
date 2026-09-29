@@ -3,3 +3,17 @@
 /hikrobot_camera:
   ros__parameters:
     use_sim_time: false
+    /hikrobot_camera_node:
+  ros__parameters:
+    # 1. 发现连接（作业要求1）
+    serial_number: ""       # 相机序列号，为空则连接第一个找到的相机
+    ip_address: "" # 如果是网口相机，需要配IP
+
+    # 2. 采集参数（作业要求2）
+    frame_rate: 30.0        # 帧率，单位 FPS
+    pixel_format: "BayerRG8" # 像素格式，需与海康SDK匹配
+
+    # 3. 曝光与增益（作业要求3）
+    exposure_time: 10000.0  # 曝光时间，单位微秒 (us)
+    gain: 10.0              # 增益，单位 dB
+    auto_exposure: false    # 手动曝光必须关闭自动模式 (作业重点)

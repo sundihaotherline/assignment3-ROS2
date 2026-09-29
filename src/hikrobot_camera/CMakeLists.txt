@@ -4,22 +4,29 @@ project(hikrobot_camera)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 
-add_executable(camera_node
-  src/main.cpp
-  src/camera_node.cpp
+# 1. 查找依赖
+find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
+
+# 2. 包含头文件路径（解决找不到 hikrobot_camera/camera_node.hpp 的问题）
+include_directories(
+  include
+  /opt/MVS/include  # 海康SDK头文件
 )
-target_compile_features(camera_node PRIVATE cxx_std_17)
-target_include_directories(camera_node PRIVATE include)
-ament_target_dependencies(camera_node rclcpp)
 
-if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-  target_compile_options(camera_node PRIVATE -Wall -Wextra -Wpedantic)
-endif()
+# 3. 生成可执行文件（必须准确写全 main.cpp 和 camera_node.cpp）
+add_executable(hikrobot_camera_node src/main.cpp src/camera_node.cpp)
 
-# TODO(student): Declare and link the dependencies used by your implementation,
-# including the vendor SDK. The starter does not discover or link MVS.
+# 4. 链接 ROS 2 依赖（这行必须写在 add_executable 之后！它也会解决找不到 sensor_msgs 的问题）
+ament_target_dependencies(hikrobot_camera_node rclcpp sensor_msgs)
 
-install(TARGETS camera_node DESTINATION lib/${PROJECT_NAME})
-install(DIRECTORY launch config DESTINATION share/${PROJECT_NAME})
+# 5. 链接海康 SDK 库
+target_link_libraries(hikrobot_camera_node /opt/MVS/lib/64/libMvCameraControl.so)
+
+# 6. 安装规则
+install(TARGETS
+  hikrobot_camera_node
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 ament_package()

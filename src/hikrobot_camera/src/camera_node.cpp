@@ -140,6 +140,9 @@ void CameraNode::set_camera_parameters()
   if (camera_handle_ == nullptr) return;
 
   double exposure = this->get_parameter("exposure_time").as_double();
+    // ... 在设置增益的那行代码上方加上这行 ...
+  MV_CC_SetEnumValue(camera_handle_, "GainAuto", 0); // 0 代表关闭自动增益
+  int ret_gain = MV_CC_SetFloatValue(camera_handle_, "Gain", gain);
   double gain = this->get_parameter("gain").as_double();
   bool auto_exposure = this->get_parameter("auto_exposure").as_bool();
   double fps = this->get_parameter("frame_rate").as_double();
@@ -176,41 +179,46 @@ void CameraNode::grab_image()
 {
   if (camera_handle_ == nullptr) return;
 
-  // 1. 定义海康的图像信息结构体
   MV_FRAME_OUT stImageInfo = {0};
-  
-  // 2. 获取一帧图像数据（超时时间设为1000ms）
   int nRet = MV_CC_GetImageBuffer(camera_handle_, &stImageInfo, 1000);
-  
+
   if (nRet != MV_OK) {
-    RCLCPP_WARN(this->get_logger(), "抓图失败，错误码: 0x%x。尝试断线重连...", nRet);
-    // 作业要求：断线重连机制
+    RCLCPP_ERROR(this->get_logger(), "抓图失败，尝试重连...");
     disconnect_camera();
-    connect_camera();
+    if (connect_camera()) { set_camera_parameters(); }
     return;
   }
 
-  // 3. 转换为 ROS 2 的 Image 消息
+  // --- 下面的代码是您之前缺失的最核心部分 ---
+  // 1. 转换为 ROS 2 的 Image 消息
   auto msg = std::make_unique<sensor_msgs::msg::Image>();
   msg->header.stamp = this->now();
-  msg->header.frame_id = "camera_link";
-  
-  // 🌟 注意：这里需要根据您的实际像素格式（YAML里的pixel_format）来设置 encoding
-  // 如果格式不匹配，RViz2 里会显示花屏或无法显示
-  msg->height = stImageInfo.stFrameInfo.nExtendHeight;
-  msg->width = stImageInfo.stFrameInfo.nExtendWidth;
-  msg->encoding = "bayer_rgg8"; // 假设您的YAML里配置的是 BayerRG8，如果是 Mono8 则改为 "mono8"
-  msg->step = stImageInfo.stFrameInfo.nExtendWidth; // 通常等于宽度（单通道8位时）
-  
-  // 拷贝海康图像数据到 ROS 2 消息中
-  msg->data.assign(stImageInfo.pBufAddr, stImageInfo.pBufAddr + stImageInfo.stFrameInfo.nFrameLen);
+  msg->header.frame_id = "camera_link"; // 和 RViz2 里的 Fixed Frame 保持一致
 
-  // 4. 发布图像话题
+  // 2. 填写图像参数（这里需要根据你的相机实际输出格式调整！）
+  msg->height = stImageInfo.stFrameInfo.nHeight;
+  msg->width = stImageInfo.stFrameInfo.nWidth;
+  msg->is_bigendian = false;
+  
+  // ⚠️ 重点：编码格式必须和你的 YAML 设置匹配
+  // 如果你 YAML 设了 BayerRG8，这里就写 "bayer_rgg8"（RViz2 可能需要 cv_bridge 转换）
+  // 为了测试，先写 "mono8" 试试，或者 "rgb8"
+  msg->encoding = "mono8"; 
+  msg->step = stImageInfo.stFrameInfo.nWidth; // 单通道 8位：宽度 = 步长。如果是彩色，步长=宽度*3
+
+  // 3. 拷贝图像数据
+  size_t data_size = stImageInfo.stFrameInfo.nFrameLen;
+  msg->data.resize(data_size);
+  memcpy(msg->data.data(), stImageInfo.pBufAddr, data_size);
+
+  // 4. 发布！就这一行，之前没有它所以 RViz2 没画面！
   image_pub_->publish(std::move(msg));
 
-  // 5. 🚨 必须释放 SDK 的图像缓存，否则相机会卡死！
+  // 5. 别忘了释放缓存
   MV_CC_FreeImageBuffer(camera_handle_, &stImageInfo);
 }
+
+
 rcl_interfaces::msg::SetParametersResult CameraNode::on_parameter_event(
   const std::vector<rclcpp::Parameter> & parameters)
 {

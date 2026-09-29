@@ -1,21 +1,24 @@
 <?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>hikrobot_camera</name>
   <version>0.0.0</version>
-  <description>Training scaffold for a ROS 2 Humble camera SDK assignment.</description>
-  <!-- Replace placeholder maintainer and choose a license before publishing. -->
+  <description>ROS 2 Camera SDK wrapper for Hikrobot</description>
   <maintainer email="student@example.com">Student Name</maintainer>
   <license>TODO</license>
+
   <buildtool_depend>ament_cmake</buildtool_depend>
+  
   <depend>rclcpp</depend>
   <depend>sensor_msgs</depend>
+  <depend>rcl_interfaces</depend>
   <depend>camera_info_manager</depend>
+
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>ament_index_python</exec_depend>
-  <!-- Add dependencies when your implementation uses them. -->
+
   <export>
     <build_type>ament_cmake</build_type>
   </export>
 </package>
-/

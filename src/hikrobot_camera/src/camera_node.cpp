@@ -41,6 +41,7 @@ CameraNode::CameraNode(const rclcpp::NodeOptions & options)
 CameraNode::~CameraNode()
 {
   disconnect_camera();
+          MV_CC_Finalize();                     // 反初始化SDK (参考图4)
 }
 
 
@@ -128,7 +129,7 @@ void CameraNode::disconnect_camera()
         MV_CC_StopGrabbing(camera_handle_);   // 停止取流
         MV_CC_CloseDevice(camera_handle_);    // 关闭设备
         MV_CC_DestroyHandle(camera_handle_);  // 销毁句柄 (参考图4)
-        MV_CC_Finalize();                     // 反初始化SDK (参考图4)
+
         camera_handle_ = nullptr;
         RCLCPP_INFO(this->get_logger(), "相机资源已释放");
     }
@@ -139,38 +140,33 @@ void CameraNode::set_camera_parameters()
 {
   if (camera_handle_ == nullptr) return;
 
+  // 1. 读取参数（必须放在最开头，只读一次！）
   double exposure = this->get_parameter("exposure_time").as_double();
-    // ... 在设置增益的那行代码上方加上这行 ...
-  MV_CC_SetEnumValue(camera_handle_, "GainAuto", 0); // 0 代表关闭自动增益
-  int ret_gain = MV_CC_SetFloatValue(camera_handle_, "Gain", gain);
   double gain = this->get_parameter("gain").as_double();
   bool auto_exposure = this->get_parameter("auto_exposure").as_bool();
   double fps = this->get_parameter("frame_rate").as_double();
 
-  // 1. 设置曝光模式（0: 关闭自动，1: 一次，2: 连续）
+  // 2. 设置曝光
   if (auto_exposure) {
     MV_CC_SetEnumValue(camera_handle_, "ExposureAuto", 2);
   } else {
     MV_CC_SetEnumValue(camera_handle_, "ExposureAuto", 0);
-    // 真正设置曝光时间
     int ret = MV_CC_SetFloatValue(camera_handle_, "ExposureTime", exposure);
     if (ret != MV_OK) {
       RCLCPP_ERROR(this->get_logger(), "设置曝光失败，错误码: %x", ret);
     }
   }
 
-  // 2. 设置增益
+  // 3. 设置增益（这里保证 int ret_gain 只出现一次！）
+  MV_CC_SetEnumValue(camera_handle_, "GainAuto", 0);
   int ret_gain = MV_CC_SetFloatValue(camera_handle_, "Gain", gain);
   if (ret_gain != MV_OK) {
-    RCLCPP_ERROR(this->get_logger(), "设置增益失败，错误码: %x", ret_gain);
+    RCLCPP_WARN(this->get_logger(), "设置增益失败，错误码: %x", ret_gain);
   }
 
-  // 3. 设置帧率（硬件层面）
+  // 4. 设置帧率
   MV_CC_SetBoolValue(camera_handle_, "AcquisitionFrameRateEnable", true);
-  int ret_fps = MV_CC_SetFloatValue(camera_handle_, "AcquisitionFrameRate", fps);
-  if (ret_fps != MV_OK) {
-    RCLCPP_WARN(this->get_logger(), "设置相机硬件帧率失败（可能超出上限）");
-  }
+  MV_CC_SetFloatValue(camera_handle_, "AcquisitionFrameRate", fps);
 
   RCLCPP_INFO(this->get_logger(), "参数设置完成: 曝光=%.2f, 增益=%.2f", exposure, gain);
 }

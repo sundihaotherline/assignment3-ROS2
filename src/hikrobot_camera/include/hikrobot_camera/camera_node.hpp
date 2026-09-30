@@ -22,8 +22,17 @@ private:
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr parameters_callback_handle_;
   rcl_interfaces::msg::SetParametersResult on_parameter_event(
       const std::vector<rclcpp::Parameter> & parameters);
-  // 海康相机句柄
-  void* camera_handle_ = nullptr;
+
+
+    // 海康相机句柄
+    void* camera_handle_ = nullptr;
+
+    // 👇👇👇 在这里添加这两个状态变量 👇👇👇
+    bool is_connected_ = false;  // 相机是否已连接
+    int retry_count_ = 0;        // 重连尝试次数计数器
+    // 👆👆👆 添加结束 👆👆👆
+
+    // ... 下面是你原本的 connect_camera 等函数声明 ...
 
   // 内部功能函数
   bool connect_camera();                 // 连接相机

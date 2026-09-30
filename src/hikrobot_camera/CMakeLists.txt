@@ -3,6 +3,8 @@ project(hikrobot_camera)
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(cv_bridge REQUIRED)
+find_package(OpenCV REQUIRED)
 
 # 1. 查找依赖
 find_package(rclcpp REQUIRED)
@@ -18,9 +20,10 @@ include_directories(
 add_executable(hikrobot_camera_node src/main.cpp src/camera_node.cpp)
 
 # 4. 链接 ROS 2 依赖（这行必须写在 add_executable 之后！它也会解决找不到 sensor_msgs 的问题）
-ament_target_dependencies(hikrobot_camera_node rclcpp sensor_msgs)
+ament_target_dependencies(hikrobot_camera_node rclcpp sensor_msgs cv_bridge)
 
 # 5. 链接海康 SDK 库
+target_link_libraries(hikrobot_camera_node ${OpenCV_LIBS})
 target_link_libraries(hikrobot_camera_node /opt/MVS/lib/64/libMvCameraControl.so)
 
 # 6. 安装规则

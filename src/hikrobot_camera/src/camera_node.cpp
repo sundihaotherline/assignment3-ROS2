@@ -1,4 +1,6 @@
 #include "hikrobot_camera/camera_node.hpp"
+#include <cv_bridge/cv_bridge.h>
+#include <opencv2/opencv.hpp>
 
 namespace hikrobot_camera
 {
@@ -173,25 +175,33 @@ void CameraNode::grab_image()
     return;
   }
 
-  // 3. 转换为 ROS 消息
+    // 3. 转换为 ROS 2 消息（使用 OpenCV 进行 Bayer 转 BGR 格式）
   auto msg = std::make_unique<sensor_msgs::msg::Image>();
   msg->header.stamp = this->now();
   msg->header.frame_id = "camera_link";
-  msg->height = stImageInfo.stFrameInfo.nHeight;
-  msg->width = stImageInfo.stFrameInfo.nWidth;
+
+  // 构建 OpenCV 的 Mat 对象 (单通道，8位，CV_8UC1)
+  cv::Mat bayer_img(stImageInfo.stFrameInfo.nHeight, stImageInfo.stFrameInfo.nWidth, CV_8UC1, stImageInfo.pBufAddr);
+  cv::Mat bgr_img;
+  
+  // 执行颜色空间转换：从 BayerRG 转成 BGR (如果显示偏色，把 BayerRG2BGR 改成 BayerBG2BGR)
+  cv::cvtColor(bayer_img, bgr_img, cv::COLOR_BayerBG2BGR);
+
+  msg->height = bgr_img.rows;
+  msg->width = bgr_img.cols;
   msg->is_bigendian = false;
-  msg->encoding = "mono8"; 
-  msg->step = stImageInfo.stFrameInfo.nWidth;
+  msg->encoding = "bgr8"; // 注意这里改成了 bgr8 彩色格式
+  msg->step = bgr_img.cols * 3; // 彩色图，步长 = 宽度 * 3
 
-  // ⚠️ 安全计算内存大小，防止越界崩溃！
+  // 安全计算内存大小
   size_t data_size = msg->step * msg->height;
-  if (stImageInfo.stFrameInfo.nFrameLen < data_size) {
-      data_size = stImageInfo.stFrameInfo.nFrameLen;
-  }
   msg->data.resize(data_size);
-  memcpy(msg->data.data(), stImageInfo.pBufAddr, data_size);
-
+  memcpy(msg->data.data(), bgr_img.data, data_size);
+  
+  // 4. 发布
   image_pub_->publish(std::move(msg));
+
+  // 5. 释放缓存
   MV_CC_FreeImageBuffer(camera_handle_, &stImageInfo);
 }
 

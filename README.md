@@ -18,7 +18,7 @@ colcon build --packages-select hikrobot_camera
 source install/setup.zsh
 
  2. 运行节点（推荐使用 sudo -E 提权以防 Linux USB 权限不足）
-sudo -E env "PATH=$PATH" ros2 run hikrobot_camera hikrobot_camera_node
+ros2 run hikrobot_camera hikrobot_camera_node
 
 ## 图像查看
 source /opt/ros/humble/setup.zsh
@@ -45,3 +45,40 @@ gain	              double	           10.0	                    增益值，单位
 frame_rate	          double	           30.0	                    目标采集帧率 (FPS)
 auto_exposure	      bool	              false	                    是否开启自动曝光
 pixel_format	      string	          Bayer RG8                    像素格式（需与代码中 encoding 对应）
+## SDK及依赖的安装方式
+
+### 1. 海康 MVS SDK 安装
+- **下载**：前往 [海康机器人官网](https://www.hikrobotics.com/cn/machinevision/service/download) 下载对应平台的 Linux 版本 SDK（例如：`MVS-5.1.0_Linux_x86_64_xxxxxxxx.deb`）。
+- **安装**：在终端中进入下载目录，执行以下命令：
+  ```bash
+  sudo dpkg -i MVS-*.deb
+ ### 依赖修复
+ sudo apt --fix-broken install
+ ### 2.所有依赖
+ <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>rcl_interfaces</depend>
+  <depend>camera_info_manager</depend>
+    <depend>cv_bridge</depend>
+  <depend>libopencv-dev</depend>
+
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+
+# 1. 查找 ROS 2 依赖
+find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(cv_bridge REQUIRED)
+
+# 2. 包含海康 SDK 的头文件路径
+include_directories(/opt/MVS/include)
+
+# 3. 生成可执行文件
+add_executable(hikrobot_camera_node src/main.cpp src/camera_node.cpp)
+
+# 4. 链接 ROS 2 依赖
+ament_target_dependencies(hikrobot_camera_node rclcpp sensor_msgs cv_bridge)
+
+# 5. 链接海康 SDK 动态库（这是最关键的底层依赖！）
+target_link_libraries(hikrobot_camera_node /opt/MVS/lib/64/libMvCameraControl.so)

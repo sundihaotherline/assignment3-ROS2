@@ -36,3 +36,12 @@ ros2 topic hz /image_raw
 ros2 param set /hikrobot_camera exposure_time -100.0
 ### 断线重连测试
 在节点运行过程中，直接拔掉 USB 线，终端将进入重连循环；等待约 3-5 秒重新插回 USB 线，节点应自动打印 相机重连成功！ 并恢复图像发布。
+### 可配置参数
+参数名	               类型	                 默认值	                    说明
+ip_address	          string	            ""	                    相机 IP（GigE 相机填 IP，USB 相机留空）
+serial_number	      string	            "00D36741056"	                    相机序列号（用于精准匹配设备）
+exposure_time	      double	           10000.0	                曝光时间，单位微秒 (us)
+gain	              double	           10.0	                    增益值，单位 dB
+frame_rate	          double	           30.0	                    目标采集帧率 (FPS)
+auto_exposure	      bool	              false	                    是否开启自动曝光
+pixel_format	      string	          Bayer RG8                    像素格式（需与代码中 encoding 对应）
